@@ -9,9 +9,7 @@
 
 #import "PieChartView.h"
 
-
-
-
+#define kAnimationTime 1.5
 #define kHeight self.frame.size.height
 #define kWidth self.frame.size.width
 
@@ -21,6 +19,10 @@
 @property (strong, nonatomic) NSMutableArray *layerArray;
 @property (assign, nonatomic) NSInteger selectIndex;
 @property (assign, nonatomic) CGPoint defaultArcPoint;
+
+@property (assign, nonatomic) CGFloat radiu;
+@property (strong, nonatomic) NSArray *dataArray;
+@property (strong, nonatomic) NSArray *colorArray;
 
 @end
 
@@ -34,7 +36,7 @@
     }
     _radiu = radiu;
     
-    [self drawPieViewWithDataArray:self.dataArray];
+    
 }
 
 - (instancetype)initWithFrame:(CGRect)frame
@@ -45,10 +47,32 @@
         self.layerArray = [NSMutableArray array];
         self.pathArray = [NSMutableArray array];
         self.defaultArcPoint = CGPointMake(self.frame.size.width/2, self.frame.size.height/2);
-        _radiu = MIN(self.frame.size.width/2, self.frame.size.height/2);
+        self.radiu = MIN(self.frame.size.width/2, self.frame.size.height/2);
         self.selectIndex = 0;
     }
     return self;
+}
+
+- (void)setDataSource:(id<PieChartViewDataSource>)dataSource
+{
+    _dataSource = dataSource;
+    
+    if ([dataSource respondsToSelector:@selector(valuseArrayOfPieChartView:)]) {
+        self.dataArray =  [dataSource valuseArrayOfPieChartView:self];
+    }
+    
+    if ([dataSource respondsToSelector:@selector(colorsArrayOfPieChartView:)]) {
+        self.colorArray =  [dataSource colorsArrayOfPieChartView:self];
+    }
+    
+    if ([dataSource respondsToSelector:@selector(radiusOfPieChartView:)]) {
+        self.radiu = [dataSource radiusOfPieChartView:self];
+        if (self.radiu > MIN(self.frame.size.width/2, self.frame.size.height/2)) {
+            self.radiu = MIN(self.frame.size.width/2, self.frame.size.height/2);
+        }
+    }
+    
+    [self drawPieViewWithDataArray:self.dataArray];
 }
 
 - (void)drawPieViewWithDataArray:(NSArray *)dataArray
@@ -75,16 +99,11 @@
     }
     
     // 遮盖的圆
-    [self drawCoverLayer];
-}
-
-- (void)drawCoverLayer
-{
     CAShapeLayer *backLayer = [CAShapeLayer layer];
     backLayer.fillColor = [UIColor clearColor].CGColor;
     backLayer.strokeColor = self.backgroundColor.CGColor;
     backLayer.lineWidth = self.radiu + 10;
-    
+
     UIBezierPath *backLayerPath = [UIBezierPath bezierPathWithArcCenter:self.defaultArcPoint
                                                                  radius:backLayer.lineWidth/2
                                                              startAngle:-M_PI_2
@@ -93,7 +112,7 @@
     backLayer.path = backLayerPath.CGPath;
     
     CABasicAnimation *animation = [CABasicAnimation animationWithKeyPath:@"strokeStart"];
-    animation.duration = 2;
+    animation.duration = kAnimationTime;
     animation.repeatCount = 1;
     animation.fromValue = @(0);
     animation.toValue = @(1);

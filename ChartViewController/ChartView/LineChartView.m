@@ -8,72 +8,112 @@
 
 #import "LineChartView.h"
 
+#define kAnimationTime 1.5
+
 @interface LineChartView ()
 
 @property (strong, nonatomic) UIScrollView *scrollView;
 
-
 @property (strong, nonatomic) NSArray *titleArray;
+@property (strong, nonatomic) NSArray *lineValuesArray;
+@property (strong, nonatomic) NSArray *barValuesArray;
+@property (strong, nonatomic) NSArray *colorsArray;
 @property (assign, nonatomic) CGFloat originWidth;
-
-@property (assign, nonatomic) CGFloat maxValue;
-@property (assign, nonatomic) CGFloat minValue;
+@property (assign, nonatomic) CGFloat lineMaxValue;
+@property (assign, nonatomic) CGFloat lineMinValue;
+@property (assign, nonatomic) CGFloat barMaxValue;
+@property (assign, nonatomic) CGFloat barMinValue;
 
 @end
 
 @implementation LineChartView
 
 
-- (void)drawRect:(CGRect)rect {
-
-    
-
-}
-
-- (instancetype)initWithFrame:(CGRect)frame dataSource:(NSArray *)dataSourceArray
+- (instancetype)initWithFrame:(CGRect)frame
 {
     if (self = [super initWithFrame:frame]) {
         
         self.backgroundColor = [UIColor whiteColor];
         
-        self.dataSourceArray = dataSourceArray;
-        self.titleArray = @[@"1月", @"2月", @"3月", @"4月", @"5月", @"6月", @"7月", @"8月", @"9月", @"10月"];
-        self.originWidth = 40;
-        
-        // 初始化 scrollview
-        [self initScrollView];
-        // 画横线
-        [self drawHorizontalLine];
-        // 画竖线
-        [self drawVerticalLine];
-        // 画底部标签
-        [self drawBottomTitle];
-        // 画左侧刻度
-        [self drawYTextLayer];
-        // 画线
-        [self drawValueLine];
-        
-        [UIView animateWithDuration:2
-                         animations:^{
-                            
-                             self.scrollView.contentOffset = CGPointMake((self.titleArray.count + 1) * self.originWidth - self.scrollView.frame.size.width, 0);
-                             
-                         }];
+        self.originWidth = 40;        
     }
     return self;
 }
 
+- (void)setDataSource:(id<LineChartViewDataSource>)dataSource
+{
+    _dataSource = dataSource;
+    
+    // 1.初始化数据源
+    [self initArray];
+    
+    // 2.初始化 scrollView
+    [self initScrollView];
+    
+    // 3.画横线和竖线
+    [self drawHorizontalLine];
+    [self drawVerticalLine];
+    
+    // 4.底部 title
+    if (self.titleArray.count > 0)
+    {
+        [self drawBottomTitle];
+    }
+    
+    // 5.折线图
+    if (self.lineValuesArray.count > 0)
+    {
+        [self drawLineYTextLayer];
+        [self drawValueLineLayer];
+    }
+    
+    // 6.条形图
+    if (self.barValuesArray.count > 0)
+    {
+        [self drawBarYTextLayer];
+        [self drawValueBarLayer];
+    }
+}
+
+- (void)initArray
+{
+    if ([self.dataSource respondsToSelector:@selector(lineValuesArrayOfLineChartView:)]) {
+        self.lineValuesArray = [self.dataSource lineValuesArrayOfLineChartView:self];
+    }
+    if ([self.dataSource respondsToSelector:@selector(titlesArrayOfLineChartView:)]) {
+        self.titleArray = [self.dataSource titlesArrayOfLineChartView:self];
+    }
+    if ([self.dataSource respondsToSelector:@selector(barValuesArrayOfLineChartView:)]) {
+        self.barValuesArray = [self.dataSource barValuesArrayOfLineChartView:self];
+    }
+    if ([self.dataSource respondsToSelector:@selector(colorsArrayOfLineChartView:)]) {
+        self.colorsArray = [self.dataSource colorsArrayOfLineChartView:self];
+    }
+}
+
 - (void)initScrollView
 {
-    self.scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(self.originWidth, 0, self.frame.size.width - self.originWidth, self.frame.size.height)];
-    self.scrollView.contentSize = CGSizeMake((self.titleArray.count + 1) * self.originWidth, self.scrollView.frame.size.height);
+    CGFloat leftInsert = self.lineValuesArray.count > 0 ? self.originWidth : 0;
+    CGFloat rightInsert = self.barValuesArray.count > 0 ? self.originWidth : 0;
+    
+    self.scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(leftInsert, 0, self.frame.size.width - leftInsert - rightInsert, self.frame.size.height)];
     self.scrollView.showsHorizontalScrollIndicator = NO;
     self.scrollView.showsVerticalScrollIndicator = NO;
     [self addSubview:self.scrollView];
     
     self.scrollView.backgroundColor = [UIColor whiteColor];
+    
+    self.scrollView.contentSize = CGSizeMake((self.titleArray.count + 1) * self.originWidth, self.scrollView.frame.size.height);
+    
+    [UIView animateWithDuration:kAnimationTime
+                     animations:^{
+                         
+                         self.scrollView.contentOffset = CGPointMake((self.titleArray.count + 1) * self.originWidth - self.scrollView.frame.size.width, 0);
+                         
+                     }];
 }
 
+#pragma mark - HorizontalLine, VerticalLine, BottomTitle
 - (void)drawHorizontalLine
 {
     CGFloat originHeight = self.scrollView.frame.size.height / 5;
@@ -85,7 +125,7 @@
         UIBezierPath *path = [UIBezierPath bezierPath];
         
         [path moveToPoint:CGPointMake(self.originWidth * 0.5, i*originHeight + 0.5 * originHeight)];
-        [path addLineToPoint:CGPointMake(self.originWidth * 0.5 + self.originWidth * self.dataSourceArray.count, i*originHeight  + 0.5 * originHeight)];
+        [path addLineToPoint:CGPointMake(self.originWidth * 0.5 + self.originWidth * self.titleArray.count, i*originHeight  + 0.5 * originHeight)];
         [path closePath];
         shapeLayer.path = path.CGPath;
         shapeLayer.strokeColor = [[[UIColor blackColor] colorWithAlphaComponent:0.1] CGColor];
@@ -130,13 +170,19 @@
     }
 }
 
-- (void)drawYTextLayer
+#pragma mark - LineView
+- (void)drawLineYTextLayer
 {
+    NSMutableArray *yArray = [NSMutableArray array];
+    for (NSArray *array in self.lineValuesArray) {
+        [yArray addObjectsFromArray:array];
+    }
+    
     CGFloat tempMax = 0;
     CGFloat tempMin = 0;
-    for (int i = 0; i < self.dataSourceArray.count; i++)
+    for (int i = 0; i < yArray.count; i++)
     {
-        CGFloat num = [self.dataSourceArray[i] floatValue];
+        CGFloat num = [yArray[i] floatValue];
         if (num > tempMax) {
             tempMax = num;
         }
@@ -161,11 +207,118 @@
         [self.layer addSublayer:textLayer];
     }
     
-    _maxValue = max;
-    _minValue = max - orginaNum * 4;
+    _lineMaxValue = max;
+    _lineMinValue = max - orginaNum * 4;
 }
 
-- (void)drawValueLine
+- (void)drawValueLineLayer
+{
+    CGFloat originHeight = self.scrollView.frame.size.height / 5;
+    NSArray *colorArray = self.colorsArray.firstObject;
+    for (int n = 0; n < self.lineValuesArray.count; n++)
+    {
+        UIBezierPath *bezierPath = [UIBezierPath bezierPath];
+        
+        NSArray *valueArray = self.lineValuesArray[n];
+        
+        for (int i = 0; i < self.titleArray.count; i++)
+        {
+            CGFloat value = -CGFLOAT_MAX;
+            if (valueArray.count > i) {
+                value = [valueArray[i] floatValue];
+            }else {
+                continue;
+            }
+            if ([valueArray[i] isEqualToString:LineValueEmpty]) {
+                continue;
+            }
+            
+            CGFloat scale = (value - _lineMinValue) / (_lineMaxValue - _lineMinValue);
+            CGFloat y = (1-scale) * originHeight * 4 + self.originWidth * 0.5;
+            
+            CGPoint point = CGPointMake(self.originWidth + self.originWidth * i, y);
+            
+            if (i == 0)
+            {
+                [bezierPath moveToPoint:point];
+            }
+            else
+            {
+                [bezierPath addLineToPoint:point];
+            }
+            [self drawPointWithPoint:point color:[colorArray objectAtIndex:n]];
+        }
+        
+        CAShapeLayer *shapeLayer = [CAShapeLayer layer];
+        shapeLayer.path = bezierPath.CGPath;
+        shapeLayer.strokeColor = [[colorArray objectAtIndex:n] CGColor];
+        shapeLayer.fillColor = [[UIColor clearColor] CGColor];
+        shapeLayer.lineWidth = 1;
+        [self.scrollView.layer addSublayer:shapeLayer];
+        
+        
+        CABasicAnimation *animation = [CABasicAnimation animationWithKeyPath:@"strokeEnd"];
+        animation.duration = kAnimationTime;
+        animation.repeatCount = 1;
+        animation.fromValue = @(0);
+        animation.toValue = @(1);
+        animation.removedOnCompletion = NO;
+        animation.fillMode = kCAFillModeForwards;
+        [shapeLayer addAnimation:animation forKey:nil];
+        
+    }
+}
+
+- (void)drawPointWithPoint:(CGPoint)point color:(UIColor *)color
+{
+    UIBezierPath *bezierPath = [UIBezierPath bezierPathWithArcCenter:point radius:2 startAngle:-M_PI endAngle:3*M_PI clockwise:YES];
+    
+    CAShapeLayer *shapeLayer = [CAShapeLayer layer];
+    shapeLayer.path = bezierPath.CGPath;
+    shapeLayer.strokeColor = color.CGColor;
+    shapeLayer.fillColor = color.CGColor;
+    shapeLayer.lineWidth = 1;
+    [self.scrollView.layer addSublayer:shapeLayer];
+
+}
+
+#pragma mark - BarView
+- (void)drawBarYTextLayer
+{
+    CGFloat tempMax = 0;
+    CGFloat tempMin = 0;
+    for (int i = 0; i < self.barValuesArray.count; i++)
+    {
+        CGFloat num = [self.barValuesArray[i] floatValue];
+        if (num > tempMax) {
+            tempMax = num;
+        }
+        if (num < tempMin) {
+            tempMin = num;
+        }
+    }
+    
+    CGFloat max = tempMax + (tempMax - tempMin) / 8;
+    CGFloat min = tempMin - (tempMax - tempMin) / 8;
+    CGFloat orginaNum = (max-min)/4;
+    
+    CGFloat originHeight = self.scrollView.frame.size.height / 5;
+    for (int i = 0; i < 5; i ++)
+    {
+        CATextLayer *textLayer = [CATextLayer layer];
+        textLayer.frame = CGRectMake(self.frame.size.width - self.originWidth, 0.5 * originHeight + originHeight * i - 7, self.originWidth, 14);
+        textLayer.foregroundColor = [UIColor grayColor].CGColor;
+        textLayer.alignmentMode = kCAGravityCenter;
+        textLayer.fontSize = 12;
+        textLayer.string = [NSString stringWithFormat:@"%.1f", max - orginaNum * i];
+        [self.layer addSublayer:textLayer];
+    }
+    
+    _barMaxValue = max;
+    _barMinValue = max - orginaNum * 4;
+}
+
+- (void)drawValueBarLayer
 {
     CGFloat originHeight = self.scrollView.frame.size.height / 5;
     
@@ -174,53 +327,44 @@
     
     for (int i = 0; i < self.titleArray.count; i++)
     {
-        CGFloat value = [self.dataSourceArray[i] floatValue];
-        CGFloat scale = (value - _minValue) / (_maxValue - _minValue);
+        CGFloat value = -CGFLOAT_MAX;
+        if (self.barValuesArray.count > i) {
+            value = [self.barValuesArray[i] floatValue];
+        }else {
+            continue;
+        }
+        if ([self.barValuesArray[i] isEqualToString:LineValueEmpty]) {
+            continue;
+        }
+        
+        
+        CGFloat scale = (value - _barMinValue) / (_barMaxValue - _barMinValue);
+        
         CGFloat y = (1-scale) * originHeight * 4 + self.originWidth * 0.5;
         
-        CGPoint point = CGPointMake(self.originWidth + self.originWidth * i, y);
+        CGPoint point1 = CGPointMake(self.originWidth + self.originWidth * i, 0.5 * originHeight + originHeight * 4);
+        CGPoint point2 = CGPointMake(self.originWidth + self.originWidth * i, y);
         
-        if (i == 0)
-        {
-            [bezierPath moveToPoint:point];
-        }
-        else
-        {
-            [bezierPath addLineToPoint:point];
-        }
-        [self drawPointWithPoint:point];
+        [bezierPath moveToPoint:point1];
+        [bezierPath addLineToPoint:point2];
     }
     
     CAShapeLayer *shapeLayer = [CAShapeLayer layer];
     shapeLayer.path = bezierPath.CGPath;
-    shapeLayer.strokeColor = [[[UIColor redColor] colorWithAlphaComponent:1] CGColor];
+    shapeLayer.strokeColor = [[self.colorsArray.lastObject colorWithAlphaComponent:0.5] CGColor];
     shapeLayer.fillColor = [[UIColor clearColor] CGColor];
-    shapeLayer.lineWidth = 1;
+    shapeLayer.lineWidth = self.originWidth/2;
     [self.scrollView.layer addSublayer:shapeLayer];
     
     
     CABasicAnimation *animation = [CABasicAnimation animationWithKeyPath:@"strokeEnd"];
-    animation.duration = 2;
+    animation.duration = kAnimationTime;
     animation.repeatCount = 1;
     animation.fromValue = @(0);
     animation.toValue = @(1);
     animation.removedOnCompletion = NO;
     animation.fillMode = kCAFillModeForwards;
     [shapeLayer addAnimation:animation forKey:nil];
-}
-
-- (void)drawPointWithPoint:(CGPoint)point
-{
-    UIBezierPath *bezierPath = [UIBezierPath bezierPathWithArcCenter:point radius:2 startAngle:-M_PI endAngle:3*M_PI clockwise:YES];
     
-    CAShapeLayer *shapeLayer = [CAShapeLayer layer];
-    shapeLayer.path = bezierPath.CGPath;
-    shapeLayer.strokeColor = [[UIColor redColor] CGColor];
-    shapeLayer.fillColor = [[UIColor redColor] CGColor];
-    shapeLayer.lineWidth = 1;
-    [self.scrollView.layer addSublayer:shapeLayer];
-
 }
-
-
 @end

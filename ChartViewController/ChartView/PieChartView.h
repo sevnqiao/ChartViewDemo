@@ -8,11 +8,23 @@
 
 #import <UIKit/UIKit.h>
 
+@class PieChartView;
+
+@protocol PieChartViewDataSource <NSObject>
+
+@required
+- (CGFloat)radiusOfPieChartView:(PieChartView *)pieChartView;
+- (NSArray *)valuseArrayOfPieChartView:(PieChartView *)pieChartView;
+- (NSArray *)colorsArrayOfPieChartView:(PieChartView *)pieChartView;
+
+
+@end
 
 @interface PieChartView : UIView
 
-@property (assign, nonatomic) CGFloat radiu;
-@property (strong, nonatomic) NSArray *dataArray;
-@property (strong, nonatomic) NSArray *colorArray;
+@property (assign, nonatomic) id <PieChartViewDataSource>dataSource;
+
+
+
 
 @end
