@@ -28,17 +28,6 @@
 
 @implementation PieChartView
 
-
-- (void)setRadiu:(CGFloat)radiu
-{
-    if (radiu > MIN(self.frame.size.width/2, self.frame.size.height/2)) {
-        radiu = MIN(self.frame.size.width/2, self.frame.size.height/2);
-    }
-    _radiu = radiu;
-    
-    
-}
-
 - (instancetype)initWithFrame:(CGRect)frame
 {
     self = [super initWithFrame:frame];
@@ -60,11 +49,9 @@
     if ([dataSource respondsToSelector:@selector(valuseArrayOfPieChartView:)]) {
         self.dataArray =  [dataSource valuseArrayOfPieChartView:self];
     }
-    
     if ([dataSource respondsToSelector:@selector(colorsArrayOfPieChartView:)]) {
         self.colorArray =  [dataSource colorsArrayOfPieChartView:self];
     }
-    
     if ([dataSource respondsToSelector:@selector(radiusOfPieChartView:)]) {
         self.radiu = [dataSource radiusOfPieChartView:self];
         if (self.radiu > MIN(self.frame.size.width/2, self.frame.size.height/2)) {
@@ -72,7 +59,11 @@
         }
     }
     
+    // 画各部分的扇形
     [self drawPieViewWithDataArray:self.dataArray];
+    
+    // 画一个遮盖的 layer 以形成展示的动画效果
+    [self coverLayer];
 }
 
 - (void)drawPieViewWithDataArray:(NSArray *)dataArray
@@ -87,6 +78,7 @@
         
         CGPoint arcPoint = CGPointMake(self.defaultArcPoint.x, self.defaultArcPoint.y);
         
+        // 1.画扇形
         [self drawChildPieWithPercent:percent
                              arcPoint:arcPoint
                                 radiu:self.radiu
@@ -95,15 +87,28 @@
                                 color:self.colorArray[i]
                              isSelect:i == self.selectIndex];
         
+        // 2.画标注文字
+        [self drawTextWithContent:[NSString stringWithFormat:@"占比%.2f", percent]
+                          percent:percent
+                         arcPoint:arcPoint
+                            radiu:self.radiu
+                       startAngle:startAngle
+                         endAngle:endAngle
+                            color:self.colorArray[i]
+                      nextPercent:i+1 < dataArray.count ? [[dataArray objectAtIndex:i+1] floatValue] : 0];
+        
         startAngle = endAngle;
     }
-    
+}
+
+- (void)coverLayer
+{
     // 遮盖的圆
     CAShapeLayer *backLayer = [CAShapeLayer layer];
     backLayer.fillColor = [UIColor clearColor].CGColor;
     backLayer.strokeColor = self.backgroundColor.CGColor;
     backLayer.lineWidth = self.radiu + 10;
-
+    
     UIBezierPath *backLayerPath = [UIBezierPath bezierPathWithArcCenter:self.defaultArcPoint
                                                                  radius:backLayer.lineWidth/2
                                                              startAngle:-M_PI_2
@@ -151,12 +156,18 @@
     [_pathArray addObject:bezierPath];
     [_layerArray addObject:layer];
     
-    [self drawTextWithContent:[NSString stringWithFormat:@"占比%.1f", percent] percent:percent arcPoint:arcPoint radiu:radiu startAngle:startAngle endAngle:endAngle color:color];
+    
 }
 
-- (void)drawTextWithContent:(NSString *)content percent:(CGFloat)percent arcPoint:(CGPoint)arcPoint radiu:(CGFloat)radiu startAngle:(CGFloat)startAngle endAngle:(CGFloat)endAngle color:(UIColor *)color
+- (void)drawTextWithContent:(NSString *)content percent:(CGFloat)percent arcPoint:(CGPoint)arcPoint radiu:(CGFloat)radiu startAngle:(CGFloat)startAngle endAngle:(CGFloat)endAngle color:(UIColor *)color nextPercent:(CGFloat)nextPercent
 {
     CGPoint point1 = CGPointMake(arcPoint.x + radiu * cos(startAngle + percent * M_PI), arcPoint.y + radiu * sin(startAngle + percent * M_PI));
+    
+    if ( nextPercent < 0.1 && nextPercent != 0) {
+        radiu += 0.5*radiu;
+    }
+    
+    
     CGPoint point2 = CGPointMake(arcPoint.x + (radiu + 20) * cos(startAngle + percent  * M_PI), arcPoint.y + (radiu + 20) * sin(startAngle + percent * M_PI));
     
     UIBezierPath *bezierPath = [UIBezierPath bezierPath];

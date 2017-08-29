@@ -24,7 +24,4 @@
 
 @property (assign, nonatomic) id <PieChartViewDataSource>dataSource;
 
-
-
-
 @end
